@@ -3,6 +3,7 @@
 
     <queries>
         <package android:name="moe.shizuku.privileged.api" />
+        <provider android:authorities="moe.shizuku.privileged.api.shizuku" />
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -18,7 +19,15 @@
         <!-- Multi-process configuration for Shizuku dynamic binder routing -->
         <meta-data
             android:name="rikka.shizuku.multiprocess"
-            android:value="true" />
+            android:value="false" />
+
+        <!-- Explicit declaration of ShizukuProvider to bypass merge or initialization issues -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="com.example.shizukuproxy.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false" />
 
         <activity
             android:name=".MainActivity"

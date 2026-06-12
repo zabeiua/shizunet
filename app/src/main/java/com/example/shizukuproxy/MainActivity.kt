@@ -108,6 +108,11 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        checkShizukuPermissionStatus()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         Shizuku.removeRequestPermissionResultListener(this)
