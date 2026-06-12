@@ -60,5 +60,5 @@ dependencies {
     implementation("dev.rikka.shizuku:provider:13.1.5")
 
     // Google ZXing for scanning support
-    implementation("com.google.zxing:core:3.6.0")
+    implementation("com.google.zxing:core:3.5.3")
 }
