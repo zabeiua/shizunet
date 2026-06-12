@@ -43,8 +43,14 @@ object ShizukuShellExecutor {
 
         Thread {
             try {
-                // Instantiates a privileged shell process via Shizuku
-                val process = Shizuku.newProcess(arrayOf("sh"), null, null)
+                // Instantiates a privileged shell process via Shizuku using reflection to bypass visibility restrictions
+                val newProcessMethod = Shizuku::class.java.getDeclaredMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                ).apply { isAccessible = true }
+                val process = newProcessMethod.invoke(null, arrayOf("sh"), null, null) as Process
                 val os = DataOutputStream(process.outputStream)
                 val reader = BufferedReader(InputStreamReader(process.inputStream))
                 val errReader = BufferedReader(InputStreamReader(process.errorStream))
