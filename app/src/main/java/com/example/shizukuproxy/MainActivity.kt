@@ -95,7 +95,6 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProxyStudioScreen(
     isShizukuAuthorized: Boolean,
@@ -254,7 +253,7 @@ fun ProxyStudioScreen(
             onValueChange = { ipAddress = it },
             label = { Text("Active Gateway IP") },
             modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.outlinedTextFieldColors(
+            colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = ComposeColor(0xFF3B82F6),
                 unfocusedBorderColor = ComposeColor(0xFF475569)
             )
@@ -265,7 +264,7 @@ fun ProxyStudioScreen(
             onValueChange = { portString = it },
             label = { Text("HTTP Proxy Port") },
             modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.outlinedTextFieldColors(
+            colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = ComposeColor(0xFF3B82F6),
                 unfocusedBorderColor = ComposeColor(0xFF475569)
             )

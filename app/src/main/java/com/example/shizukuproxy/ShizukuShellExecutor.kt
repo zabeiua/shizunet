@@ -24,7 +24,7 @@ object ShizukuShellExecutor {
         if (!Shizuku.pingBinder()) {
             return false
         }
-        if (Shizuku.isPreV11()) {
+        if (Shizuku.getVersion() < 11) {
             return false
         }
         return Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
