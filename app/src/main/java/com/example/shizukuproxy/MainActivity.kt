@@ -44,12 +44,27 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
 
     private val requestCode = 1001
     private var isShizukuAuthorized = mutableStateOf(false)
+    private var isShizukuBinderAlive = mutableStateOf(false)
+
+    private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
+        runOnUiThread {
+            checkShizukuPermissionStatus()
+        }
+    }
+
+    private val binderDeadListener = Shizuku.OnBinderDeadListener {
+        runOnUiThread {
+            checkShizukuPermissionStatus()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Listen to Shizuku permission callbacks
+        // Listen to Shizuku permission and binder events
         Shizuku.addRequestPermissionResultListener(this)
+        Shizuku.addBinderReceivedListener(binderReceivedListener)
+        Shizuku.addBinderDeadListener(binderDeadListener)
         checkShizukuPermissionStatus()
 
         setContent {
@@ -60,6 +75,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
                 ) {
                     ProxyStudioScreen(
                         isShizukuAuthorized = isShizukuAuthorized.value,
+                        isShizukuBinderAlive = isShizukuBinderAlive.value,
                         onRequestShizukuPermission = { requestShizukuPermission() }
                     )
                 }
@@ -68,7 +84,9 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
     }
 
     private fun checkShizukuPermissionStatus() {
-        if (Shizuku.pingBinder()) {
+        val binderAlive = Shizuku.pingBinder()
+        isShizukuBinderAlive.value = binderAlive
+        if (binderAlive) {
             val granted = Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
             isShizukuAuthorized.value = granted
         } else {
@@ -93,6 +111,8 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
     override fun onDestroy() {
         super.onDestroy()
         Shizuku.removeRequestPermissionResultListener(this)
+        Shizuku.removeBinderReceivedListener(binderReceivedListener)
+        Shizuku.removeBinderDeadListener(binderDeadListener)
     }
 }
 
@@ -100,6 +120,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
 @Composable
 fun ProxyStudioScreen(
     isShizukuAuthorized: Boolean,
+    isShizukuBinderAlive: Boolean,
     onRequestShizukuPermission: () -> Unit
 ) {
     val context = LocalContext.current
@@ -178,14 +199,25 @@ fun ProxyStudioScreen(
                         color = ComposeColor.White
                     )
                     
+                    val statusText = when {
+                        isShizukuAuthorized -> "Authorized"
+                        isShizukuBinderAlive -> "Unauthorized"
+                        else -> "Not Active"
+                    }
+                    val statusColor = when {
+                        isShizukuAuthorized -> ComposeColor(0xFF10B981) // Emerald
+                        isShizukuBinderAlive -> ComposeColor(0xFFF59E0B) // Amber/Orange
+                        else -> ComposeColor(0xFFEF4444) // Red
+                    }
+
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (isShizukuAuthorized) ComposeColor(0xFF10B981) else ComposeColor(0xFFEF4444))
+                            .background(statusColor)
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = if (isShizukuAuthorized) "Authorized" else "Unauthorized",
+                            text = statusText,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = ComposeColor.White
@@ -201,7 +233,7 @@ fun ProxyStudioScreen(
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6))
                     ) {
-                        Text("Grant Shizuku Privilege Shell")
+                        Text(if (isShizukuBinderAlive) "Grant Shizuku Privilege Shell" else "Check / Connect Shizuku")
                     }
                 } else {
                     Button(
