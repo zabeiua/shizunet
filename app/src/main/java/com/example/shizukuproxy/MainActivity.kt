@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -95,6 +96,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnRequestPermissionResultListe
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProxyStudioScreen(
     isShizukuAuthorized: Boolean,
@@ -253,7 +255,7 @@ fun ProxyStudioScreen(
             onValueChange = { ipAddress = it },
             label = { Text("Active Gateway IP") },
             modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
+            colors = TextFieldDefaults.outlinedTextFieldColors(
                 focusedBorderColor = ComposeColor(0xFF3B82F6),
                 unfocusedBorderColor = ComposeColor(0xFF475569)
             )
@@ -264,7 +266,7 @@ fun ProxyStudioScreen(
             onValueChange = { portString = it },
             label = { Text("HTTP Proxy Port") },
             modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
+            colors = TextFieldDefaults.outlinedTextFieldColors(
                 focusedBorderColor = ComposeColor(0xFF3B82F6),
                 unfocusedBorderColor = ComposeColor(0xFF475569)
             )
