@@ -705,7 +705,7 @@ object ProfileGenerator {
       desc: "Android deployment manifest declaring system privilege binder metadata flags required to initialize communication loops alongside standard network access credentials.",
       language: "xml",
       code: `<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Basic access privileges -->
     <uses-permission android:name="android.permission.INTERNET" />
