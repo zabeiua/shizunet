@@ -132,8 +132,8 @@ fun ProxyStudioScreen(
     val clipboardManager = LocalClipboardManager.current
     
     var ipAddress by remember { mutableStateOf("192.168.43.1") }
-    var portString by remember { mutableStateOf("1080") }
-    var ruleCountry by remember { mutableStateOf("IR") }
+    var portString by remember { mutableStateOf("12334") }
+    var ruleCountry by remember { mutableStateOf("ru") }
     var finalOutbound by remember { mutableStateOf("proxy") }
     
     var isLoading by remember { mutableStateOf(false) }
@@ -143,7 +143,7 @@ fun ProxyStudioScreen(
 
     // Re-resolve layout JSON dynamically on variable changes
     val jsonString = remember(ipAddress, portString, ruleCountry, finalOutbound) {
-        val port = portString.toIntOrNull() ?: 1080
+        val port = portString.toIntOrNull() ?: 12334
         ProfileGenerator.generateJson(
             ip = ipAddress,
             port = port,

@@ -1,15 +1,20 @@
-name: Android Build Suite
+name: Android Build & Release Suite
 
 on:
   push:
     branches: [ "main", "master" ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
+permissions:
+  contents: write # Required for creating release drafts and uploading assets
+
 jobs:
   build:
-    name: Build Debug APK
+    name: Build & Package App
     runs-on: ubuntu-latest
 
     steps:
@@ -25,16 +30,44 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
-        gradle-version: 8.5 # Automatically provisions Gradle 8.5 runner environment safely
+        gradle-version: 8.5
         cache-disabled: true
 
-    - name: Assemble Debug Package with Gradle
-      run: gradle assembleDebug
+    - name: Assemble Debug and Release APKs
+      run: ./gradlew assembleDebug assembleRelease
 
-    - name: Upload Compiled Debug APK Artifact
+    - name: Sign Release APK
+      id: sign_app
+      if: env.HAS_SIGNING_SECRETS == 'true'
+      uses: r0adkll/sign-android-release@v1
+      with:
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.ALIAS }}
+        keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
+        keyPassword: ${{ secrets.KEY_PASSWORD }}
+      env:
+        HAS_SIGNING_SECRETS: ${{ secrets.SIGNING_KEY != '' && secrets.ALIAS != '' && secrets.KEYSTORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' }}
+
+    - name: Upload Compilation Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ShizuNet-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: ShizuNet-build-artifacts
+        path: |
+          app/build/outputs/apk/debug/app-debug.apk
+          app/build/outputs/apk/release/app-release-*.apk
         if-no-files-found: warn
         retention-days: 7
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          app/build/outputs/apk/debug/app-debug.apk
+          ${{ steps.sign_app.outputs.signedReleaseFile || 'app/build/outputs/apk/release/app-release-unsigned.apk' }}
+        draft: true
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
