@@ -5,7 +5,7 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Allows manual trigger directly from GitHub Web Interface
+  workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
   build:
@@ -19,16 +19,16 @@ jobs:
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
-        distribution: 'zulu' # High performance Zulu OpenJDK
+        distribution: 'zulu'
         java-version: '17'
-        cache: 'gradle' # Automatically cache Gradle dependencies between runs
 
-    - name: Grant Execute Permissions for Gradlew
-      run: chmod +x gradlew
-      continue-on-error: true # Safe fallback if custom directory maps are adjusted
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: 8.5 # Automatically provisions Gradle 8.5 runner environment safely
 
     - name: Assemble Debug Package with Gradle
-      run: ./gradlew assembleDebug
+      run: gradle assembleDebug
 
     - name: Upload Compiled Debug APK Artifact
       uses: actions/upload-artifact@v4
@@ -36,4 +36,4 @@ jobs:
         name: ShizuNet-debug-apk
         path: app/build/outputs/apk/debug/app-debug.apk
         if-no-files-found: warn
-        retention-days: 7 # Safe resource allocation
+        retention-days: 7
