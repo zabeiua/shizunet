@@ -1,6 +1,6 @@
 # ShizuNet (Shizuku Proxy & Configuration Link Generator)
 
-[Читать на русском языке 🇷🇺](readme_ru.md) | [Download Latest Artifact 📥](https://github.com/zabeiua/shizunet/actions/runs/27436986916/artifacts/7600343173)
+[Читать на русском языке](readme_ru.md) | [Download Latest Artifact](https://github.com/zabeiua/shizunet/actions/runs/27436986916/artifacts/7600343173)
 
 **ShizuNet** is a handy Android utility designed to simplify sharing VPN and proxy connections over a mobile hotspot (SoftAP / Tethering). The app automates detecting your hotspot's gateway IP and generates fully configured profiles and QR codes for the popular **Sing-Box** proxy client.
 
@@ -8,14 +8,14 @@ By integrating with **Shizuku**, ShizuNet requests privileged access to the Andr
 
 ---
 
-## 📥 Latest Build Download
+## Latest Build Download
 
 You can download the compiled app package directly from GitHub Actions build artifacts:
-👉 **[Download Latest Compiled Artifact](https://github.com/zabeiua/shizunet/actions/runs/27436986916/artifacts/7600343173)** *(requires logging into GitHub)*
+**[Download Latest Compiled Artifact](https://github.com/zabeiua/shizunet/actions/runs/27436986916/artifacts/7600343173)** *(requires logging into GitHub)*
 
 ---
 
-## 🌟 Key Features
+## Key Features
 
 * **Shizuku Integration (`ip r`)**:
   Securely and instantly reads Android routing tables from a privileged shell to automatically resolve the hotspot wireless interface's IP (`ap0`, `wlan1`, or `wlan0`).
@@ -31,7 +31,7 @@ You can download the compiled app package directly from GitHub Actions build art
 
 ---
 
-## 🛠️ How it Works (VPN/Proxy Sharing Scenario)
+## How it Works (VPN/Proxy Sharing Scenario)
 
 When your Android device is connected to a VPN, Android's default behavior prevents sharing that VPN connection over a Wi-Fi Hotspot with other devices—client devices bypass the VPN and connect directly through your carrier. 
 
@@ -45,7 +45,7 @@ ShizuNet resolves this using the following bypass scheme:
 
 ---
 
-## 🚀 Step-by-Step Guide
+## Step-by-Step Guide
 
 1. **Activate Shizuku**:
    Make sure the [Shizuku](https://shizuku.rikka.app/) service is active on your device (via Wireless Debugging/LADB or ROOT access).
@@ -63,7 +63,7 @@ ShizuNet resolves this using the following bypass scheme:
 
 ---
 
-## 📦 Build & Release (GitHub Actions CI/CD)
+## Build & Release (GitHub Actions CI/CD)
 
 The repository includes a ready-to-use continuous integration workflow using GitHub Actions (`.github/workflows/build.yml`).
 
