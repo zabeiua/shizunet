@@ -1,0 +1,6 @@
+{
+  "name": "ShizuNet",
+  "description": "Generate Android Kotlin Shizuku ADB command structures and produce verified Hiddify HTTP proxy JSON profiles and QR codes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
