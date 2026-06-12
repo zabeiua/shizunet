@@ -835,14 +835,15 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: '17'
-        cache: 'gradle'
 
-    - name: Grant Execute Permissions for Gradlew
-      run: chmod +x gradlew
-      continue-on-error: true
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: 8.5
+        cache-disabled: true
 
     - name: Assemble Debug Package with Gradle
-      run: ./gradlew assembleDebug
+      run: gradle assembleDebug
 
     - name: Upload Compiled Debug APK Artifact
       uses: actions/upload-artifact@v4

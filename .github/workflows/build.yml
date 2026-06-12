@@ -26,6 +26,7 @@ jobs:
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: 8.5 # Automatically provisions Gradle 8.5 runner environment safely
+        cache-disabled: true
 
     - name: Assemble Debug Package with Gradle
       run: gradle assembleDebug
