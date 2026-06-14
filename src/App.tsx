@@ -29,10 +29,10 @@ export default function App() {
   const [outboundTag, setOutboundTag] = useState("proxy");
   const [finalOutbound, setFinalOutbound] = useState("proxy");
   const [manualCodeEdit, setManualCodeEdit] = useState<string>("");
+  const [isQrGenerated, setIsQrGenerated] = useState<boolean>(false);
   
   // Custom states
   const [activeTab, setActiveTab] = useState<"visual" | "json_source" | "kotlin_shizuku">("visual");
-  const [qrFormat, setQrFormat] = useState<"singbox_uri" | "raw_json" | "http_uri">("singbox_uri");
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [simulatedAdbActive, setSimulatedAdbActive] = useState<boolean>(false);
   const [simulatedAdbOutput, setSimulatedAdbOutput] = useState<string>("10.154.51.39");
@@ -41,8 +41,41 @@ export default function App() {
   // Reference for QR code canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Generate the actual dynamic JSON configuration object based on inputs
+  // Generate the actual dynamic JSON configuration object based on inputs matching user's exact structure
   const profileJson = {
+    log: {
+      level: "info",
+      timestamp: true
+    },
+    dns: {
+      servers: [
+        {
+          tag: "dns-remote",
+          address: "8.8.8.8",
+          detour: "proxy"
+        },
+        {
+          tag: "dns-direct",
+          address: "1.1.1.1",
+          detour: "direct"
+        }
+      ],
+      rules: [
+        {
+          geosite: [ruleCountry.toLowerCase()],
+          server: "dns-direct"
+        }
+      ],
+      final: "dns-remote"
+    },
+    inbounds: [
+      {
+        type: "mixed",
+        tag: "mixed-in",
+        listen: "127.0.0.1",
+        listen_port: 2080
+      }
+    ],
     outbounds: [
       {
         type: "http",
@@ -62,11 +95,11 @@ export default function App() {
     route: {
       rules: [
         {
-          geoip: ruleCountry.toLowerCase(),
+          geoip: [ruleCountry.toLowerCase()],
           outbound: "direct"
         },
         {
-          geosite: ruleCountry.toLowerCase(),
+          geosite: [ruleCountry.toLowerCase()],
           outbound: "direct"
         }
       ],
@@ -103,36 +136,28 @@ export default function App() {
       }
       if (parsed.route?.rules && Array.isArray(parsed.route.rules)) {
         const rulesGeo = parsed.route.rules.find((r: any) => r.geoip);
-        if (rulesGeo) setRuleCountry(rulesGeo.geoip);
+        if (rulesGeo && Array.isArray(rulesGeo.geoip) && rulesGeo.geoip.length > 0) {
+          setRuleCountry(rulesGeo.geoip[0]);
+        }
       }
     } catch (e: any) {
       setSyntaxStatus({ valid: false, error: e.message || "Invalid JSON syntax" });
     }
   };
 
-  // Get deep link / format to encode into QR code
+  // Get raw JSON string to encode directly into QR code
   const getQrCodeContent = () => {
-    const currentJson = syntaxStatus.valid ? manualCodeEdit : jsonString;
-    switch (qrFormat) {
-      case "singbox_uri":
-        // Base64 or standard URL safe encoding of JSON configuration for sing-box import link
-        try {
-          const encodedJson = encodeURIComponent(currentJson);
-          return `sing-box://import?config=${encodedJson}`;
-        } catch {
-          return `sing-box://import?config=${encodeURIComponent(jsonString)}`;
-        }
-      case "http_uri":
-        return `http://${ipAddress || "127.0.0.1"}:${port || 12334}`;
-      case "raw_json":
-      default:
-        return currentJson;
-    }
+    return syntaxStatus.valid ? manualCodeEdit : jsonString;
   };
+
+  // Reset generation status when critical fields change
+  useEffect(() => {
+    setIsQrGenerated(false);
+  }, [ipAddress, port, ruleCountry, outboundTag, finalOutbound]);
 
   // Redraw QR code when canvas or config content updates
   useEffect(() => {
-    if (canvasRef.current) {
+    if (canvasRef.current && isQrGenerated) {
       const content = getQrCodeContent();
       QRCode.toCanvas(
         canvasRef.current,
@@ -150,7 +175,7 @@ export default function App() {
         }
       );
     }
-  }, [ipAddress, port, ruleCountry, qrFormat, manualCodeEdit, syntaxStatus.valid]);
+  }, [isQrGenerated, ipAddress, port, ruleCountry, manualCodeEdit, syntaxStatus.valid]);
 
   // Simulate obtaining IP from raw Shizuku command output
   const runSimulatedShizukuCommand = () => {
@@ -294,33 +319,8 @@ fun ProxyStudioScreen(
 
     val scrollState = rememberScrollState()
 
-    // Re-resolve layout JSON dynamically on variables change
-    val jsonString = remember(ipAddress, portString, ruleCountry, finalOutbound) {
-        val port = portString.toIntOrNull() ?: 12334
-        ProfileGenerator.generateJson(
-            ip = ipAddress,
-            port = port,
-            geoip = ruleCountry,
-            finalOutbound = finalOutbound
-        )
-    }
-
-    // Singbox Import URI scheme: sing-box://import?config=urlencoded_json
-    val encodedUri = remember(jsonString) {
-        try {
-            "sing-box://import?config=" + URLEncoder.encode(jsonString, "UTF-8")
-        } catch (e: Exception) {
-            ""
-        }
-    }
-
-    val qrCodeBitmap = remember(encodedUri) {
-        if (encodedUri.isNotEmpty()) {
-            generateQrCode(encodedUri, 512)
-        } else {
-            null
-        }
-    }
+    var jsonString by remember { mutableStateOf("") }
+    var qrCodeBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
     Column(
         modifier = Modifier
@@ -451,8 +451,32 @@ fun ProxyStudioScreen(
             )
         )
 
+        Button(
+            onClick = {
+                val port = portString.toIntOrNull() ?: 12334
+                val generatedJson = ProfileGenerator.generateJson(
+                    ip = ipAddress,
+                    port = port,
+                    geoip = ruleCountry,
+                    finalOutbound = finalOutbound
+                )
+                jsonString = generatedJson
+                try {
+                    qrCodeBitmap = generateQrCode(generatedJson, 512)
+                    Toast.makeText(context, "Hiddify JSON Profile & QR generated successfully!", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    qrCodeBitmap = null
+                    Toast.makeText(context, "Error generating QR payload", Toast.LENGTH_SHORT).show()
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF10B981))
+        ) {
+            Text("Generate Hiddify Profile & QR", fontWeight = FontWeight.Bold)
+        }
+
         Text(
-            text = "QR Scan Configuration",
+            text = "Hiddify Profile QR Code",
             color = ComposeColor.White,
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp
@@ -468,10 +492,27 @@ fun ProxyStudioScreen(
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                qrCodeBitmap?.let { bitmap ->
+                if (qrCodeBitmap == null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(240.dp)
+                            .background(ComposeColor(0xFF0F172A), RoundedCornerShape(8.dp))
+                            .border(1.dp, ComposeColor(0xFF334155), RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No profile generated.\nConfigure options and click 'Generate Hiddify Profile & QR' above.",
+                            color = ComposeColor.Gray,
+                            fontSize = 12.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                } else {
                     Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = "Config QR Scan",
+                        bitmap = qrCodeBitmap!!.asImageBitmap(),
+                        contentDescription = "Hiddify Config QR",
                         modifier = Modifier
                             .size(240.dp)
                             .background(ComposeColor.White)
@@ -488,24 +529,14 @@ fun ProxyStudioScreen(
                 ) {
                     Button(
                         onClick = {
-                            clipboardManager.setText(AnnotatedString(encodedUri))
-                            Toast.makeText(context, "URI Config Copied!", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6))
-                    ) {
-                        Text("Copy Link")
-                    }
-
-                    Button(
-                        onClick = {
                             clipboardManager.setText(AnnotatedString(jsonString))
-                            Toast.makeText(context, "Full Raw JSON Copied!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Hiddify Profile JSON Copied!", Toast.LENGTH_SHORT).show()
                         },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF475569))
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6)),
+                        enabled = jsonString.isNotEmpty()
                     ) {
-                        Text("Copy JSON")
+                        Text("Copy Profile JSON")
                     }
                 }
             }
@@ -653,7 +684,7 @@ object ShizukuShellExecutor {
     "ProfileGenerator.kt": {
       name: "ProfileGenerator.kt",
       path: "app/src/main/java/com/example/shizukuproxy/ProfileGenerator.kt",
-      desc: "Pure Kotlin dynamic file serializer formatting Singbox schema configs correctly so receivers consume the shared proxy gateway payload cleanly.",
+      desc: "Pure Kotlin dynamic file serializer formatting Hiddify schema configs correctly so receivers consume the shared proxy proxy gateway cleanly.",
       language: "kotlin",
       code: `package com.example.shizukuproxy
 
@@ -666,6 +697,39 @@ object ProfileGenerator {
         val cleanFinal = finalOutbound.lowercase().trim()
         
         return """{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-remote",
+        "address": "8.8.8.8",
+        "detour": "proxy"
+      },
+      {
+        "tag": "dns-direct",
+        "address": "1.1.1.1",
+        "detour": "direct"
+      }
+    ],
+    "rules": [
+      {
+        "geosite": ["$cleanGeoip"],
+        "server": "dns-direct"
+      }
+    ],
+    "final": "dns-remote"
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "listen_port": 2080
+    }
+  ],
   "outbounds": [
     {
       "type": "http",
@@ -685,11 +749,11 @@ object ProfileGenerator {
   "route": {
     "rules": [
       {
-        "geoip": "$cleanGeoip",
+        "geoip": ["$cleanGeoip"],
         "outbound": "direct"
       },
       {
-        "geosite": "$cleanGeoip",
+        "geosite": ["$cleanGeoip"],
         "outbound": "direct"
       }
     ],
@@ -1058,78 +1122,67 @@ jobs:
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
               
               {/* QR Render output */}
-              <div className="md:col-span-5 bg-white p-5 rounded-[20px] flex flex-col items-center justify-center shadow-2xl max-w-[260px] mx-auto w-full border border-white/10">
-                <canvas ref={canvasRef} className="w-full aspect-square" />
-                <span className="text-[10px] text-slate-500 text-center font-bold font-sans mt-3 tracking-wider uppercase">
-                  Hiddify Scanner Friendly
-                </span>
+              <div className="md:col-span-5 bg-white p-5 rounded-[20px] flex flex-col items-center justify-center shadow-2xl max-w-[260px] mx-auto w-full border border-white/10 aspect-square">
+                {!isQrGenerated ? (
+                  <div className="text-center p-3 select-none flex flex-col items-center justify-center h-full">
+                    <span className="text-[10px] text-amber-600 font-extrabold tracking-widest uppercase mb-1.5 bg-amber-100 px-2 py-0.5 rounded-full">
+                      Out of Date
+                    </span>
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                      Gateway or Port changed.<br/>Please trigger generation below.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <canvas ref={canvasRef} className="w-full aspect-square" />
+                    <span className="text-[10px] text-slate-500 text-center font-bold font-sans mt-3 tracking-wider uppercase">
+                      Hiddify Scanner Friendly
+                    </span>
+                  </>
+                )}
               </div>
 
               {/* QR Options */}
               <div className="md:col-span-7 flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Protocol Type Format</span>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Hiddify Configuration Sync</span>
                   
-                  {/* Select Format option */}
-                  <div className="flex flex-col gap-2.5">
-                    <label className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${qrFormat === "singbox_uri" ? "bg-blue-500/10 border-blue-500/50" : "bg-white/5 border-white/10 hover:bg-white/10"}`}>
-                      <input 
-                        type="radio" 
-                        name="qrformat" 
-                        checked={qrFormat === "singbox_uri"} 
-                        onChange={() => setQrFormat("singbox_uri")}
-                        className="mt-1 accent-blue-500"
-                      />
-                      <div className="text-xs">
-                        <span className="font-bold text-white block">Sing-box deep link URL (Recommended)</span>
-                        <p className="text-slate-400 text-[11px] mt-0.5">Encodes setup JSON raw layout inside <code className="bg-black/30 text-indigo-300 px-1 py-0.5 rounded text-[10px]">sing-box://import</code> launcher.</p>
-                      </div>
-                    </label>
-
-                    <label className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${qrFormat === "http_uri" ? "bg-blue-500/10 border-blue-500/50" : "bg-white/5 border-white/10 hover:bg-white/10"}`}>
-                      <input 
-                        type="radio" 
-                        name="qrformat" 
-                        checked={qrFormat === "http_uri"} 
-                        onChange={() => setQrFormat("http_uri")}
-                        className="mt-1 accent-blue-500"
-                      />
-                      <div className="text-xs">
-                        <span className="font-bold text-white block">Direct HTTP Proxy URI fallback</span>
-                        <p className="text-slate-400 text-[11px] mt-0.5">Host gateway proxy address: <code className="bg-black/30 text-emerald-400 px-1 py-0.5 rounded text-[10px]">http://{ipAddress}:{port}</code>.</p>
-                      </div>
-                    </label>
-
-                    <label className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${qrFormat === "raw_json" ? "bg-blue-500/10 border-blue-500/50" : "bg-white/5 border-white/10 hover:bg-white/10"}`}>
-                      <input 
-                        type="radio" 
-                        name="qrformat" 
-                        checked={qrFormat === "raw_json"} 
-                        onChange={() => setQrFormat("raw_json")}
-                        className="mt-1 accent-blue-500"
-                      />
-                      <div className="text-xs">
-                        <span className="font-bold text-white block">Raw JSON Profile String</span>
-                        <p className="text-slate-400 text-[11px] mt-0.5">Scans complete configuration dictionary (Requires high-res camera scan).</p>
-                      </div>
-                    </label>
+                  <div className="bg-white/5 border border-white/10 p-4 rounded-2xl leading-relaxed text-xs text-slate-300">
+                    <p className="mb-2">
+                      The generated QR code encodes the raw unified Hiddify HTTP proxy parameters in the target client JSON format directly.
+                    </p>
+                    <p>
+                      Scan the QR code within Hiddify on your mobile device to establish connection parameters instantly.
+                    </p>
                   </div>
                 </div>
 
-                <div className="pt-2">
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    onClick={() => setIsQrGenerated(true)}
+                    className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white py-3 px-4 rounded-xl text-xs font-bold shadow-lg transition"
+                  >
+                    Generate Hiddify QR
+                  </button>
+
                   <button
                     onClick={() => triggerCopy(getQrCodeContent(), "payload")}
-                    className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/15 text-slate-200 hover:text-white py-3 rounded-xl text-xs font-semibold transition"
+                    disabled={!isQrGenerated}
+                    className={`flex-1 flex items-center justify-center gap-2 border text-xs py-3 px-4 rounded-xl font-bold transition ${
+                      isQrGenerated 
+                        ? "bg-white/5 hover:bg-white/10 border-white/15 text-slate-200 hover:text-white" 
+                        : "opacity-45 cursor-not-allowed bg-white/5 border-white/5 text-slate-500"
+                    }`}
                   >
                     {copiedText === "payload" ? (
                       <>
                         <Check className="w-4 h-4 text-emerald-400" />
-                        Copied Link Payload Url
+                        Copied JSON!
                       </>
                     ) : (
                       <>
                         <Copy className="w-4 h-4" />
-                        Copy Raw QR Payload Context
+                        Copy Profile JSON
                       </>
                     )}
                   </button>

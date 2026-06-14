@@ -9,6 +9,39 @@ object ProfileGenerator {
         val cleanFinal = finalOutbound.lowercase().trim()
         
         return """{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-remote",
+        "address": "8.8.8.8",
+        "detour": "proxy"
+      },
+      {
+        "tag": "dns-direct",
+        "address": "1.1.1.1",
+        "detour": "direct"
+      }
+    ],
+    "rules": [
+      {
+        "geosite": ["$cleanGeoip"],
+        "server": "dns-direct"
+      }
+    ],
+    "final": "dns-remote"
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "listen_port": 2080
+    }
+  ],
   "outbounds": [
     {
       "type": "http",
@@ -28,11 +61,11 @@ object ProfileGenerator {
   "route": {
     "rules": [
       {
-        "geoip": "$cleanGeoip",
+        "geoip": ["$cleanGeoip"],
         "outbound": "direct"
       },
       {
-        "geosite": "$cleanGeoip",
+        "geosite": ["$cleanGeoip"],
         "outbound": "direct"
       }
     ],
