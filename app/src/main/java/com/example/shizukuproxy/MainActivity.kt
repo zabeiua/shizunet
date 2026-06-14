@@ -418,20 +418,7 @@ fun ProxyStudioScreen(
                                         Row(
                                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
-                                            Button(
-                                                onClick = {
-                                                    ipAddress = device.ip
-                                                    Toast.makeText(context, "Active Gateway set to ${device.ip}", Toast.LENGTH_SHORT).show()
-                                                },
-                                                colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF1E293B)),
-                                                modifier = Modifier
-                                                    .height(26.dp)
-                                                    .border(1.dp, ComposeColor(0xFF475569), RoundedCornerShape(4.dp)),
-                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                                shape = RoundedCornerShape(4.dp)
-                                            ) {
-                                                Text("USE IP", fontSize = 8.sp, color = ComposeColor.White, fontWeight = FontWeight.Bold)
-                                            }
+
 
                                             Button(
                                                 onClick = {
@@ -440,10 +427,10 @@ fun ProxyStudioScreen(
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6)),
                                                 modifier = Modifier.height(26.dp),
-                                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
                                                 shape = RoundedCornerShape(4.dp)
                                             ) {
-                                                Text("COPY", fontSize = 8.sp, color = ComposeColor.White, fontWeight = FontWeight.Bold)
+                                                Text("COPY IP", fontSize = 8.sp, color = ComposeColor.White, fontWeight = FontWeight.Bold)
                                             }
                                         }
                                     }

@@ -701,8 +701,8 @@ object ShizukuShellExecutor {
                 val reader = BufferedReader(InputStreamReader(process.inputStream))
                 val errReader = BufferedReader(InputStreamReader(process.errorStream))
 
-                // Execute the neighbors routing inspection
-                val command = "ip neigh"
+                // Execute the neighbors routing inspection excluding stale entries
+                val command = "ip neigh | grep -v STALE"
                 os.writeBytes(command + "\n")
                 os.writeBytes("exit\n")
                 os.flush()
@@ -750,7 +750,10 @@ object ShizukuShellExecutor {
                 val mac = if (lladdrIndex != -1 && lladdrIndex + 1 < parts.size) parts[lladdrIndex + 1] else ""
                 val status = parts.last()
 
-                if (mac.isNotEmpty() && !status.equals("failed", ignoreCase = true) && !status.equals("incomplete", ignoreCase = true)) {
+                if (mac.isNotEmpty() && 
+                    !status.equals("failed", ignoreCase = true) && 
+                    !status.equals("incomplete", ignoreCase = true) && 
+                    !status.equals("stale", ignoreCase = true)) {
                     val manufacturer = getManufacturerFromMac(mac)
                     list.add(ConnectedDevice(ip, mac, interfaceName, status, manufacturer))
                 }
