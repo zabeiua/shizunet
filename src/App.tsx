@@ -17,7 +17,11 @@ import {
   Cpu,
   Info,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  Trash2,
+  Play,
+  X
 } from "lucide-react";
 import QRCode from "qrcode";
 
@@ -32,11 +36,67 @@ export default function App() {
   const [isQrGenerated, setIsQrGenerated] = useState<boolean>(false);
   
   // Custom states
-  const [activeTab, setActiveTab] = useState<"visual" | "json_source" | "kotlin_shizuku">("visual");
+  const [activeTab, setActiveTab] = useState<"visual" | "json_source" | "kotlin_shizuku" | "custom_shell">("visual");
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [simulatedAdbActive, setSimulatedAdbActive] = useState<boolean>(false);
   const [simulatedAdbOutput, setSimulatedAdbOutput] = useState<string>("10.154.51.39");
   const [syntaxStatus, setSyntaxStatus] = useState<{valid: boolean; error: string | null}>({valid: true, error: null});
+
+  // Custom user shell commands states
+  const [customCommands, setCustomCommands] = useState<{ id: string; name: string; command: string }[]>([
+    { id: "1", name: "Show Network Routing Table", command: "ip route show" },
+    { id: "2", name: "Show Active SoftAP (ap0) info", command: "ip route show dev ap0" },
+    { id: "3", name: "List Network Interface Status", command: "ip link show" },
+    { id: "4", name: "List Connected Neighbours (excluding STALE)", command: "ip neigh show | grep -v STALE" },
+    { id: "5", name: "Check Active HTTP Proxy", command: "settings get global http_proxy" },
+    { id: "6", name: "Get System Preferred DNS", command: "getprop net.dns1" }
+  ]);
+  const [newCommandName, setNewCommandName] = useState("");
+  const [newCommandText, setNewCommandText] = useState("");
+  const [terminalOutput, setTerminalOutput] = useState<string>(
+    "Welcome to ShizuNet Android Custom Shell.\n" +
+    "Click the run [▶] icon beside any command to execute it via Shizuku!\n" +
+    "You can also add or remove your own custom shell commands."
+  );
+  const [terminalRunning, setTerminalRunning] = useState<boolean>(false);
+
+  // Execute simulated custom ADB commands with high fidelity responses
+  const runCustomShellCommand = (cmdName: string, cmdStr: string) => {
+    if (terminalRunning) return;
+    setTerminalRunning(true);
+    
+    // Add prompt simulation line first
+    const timestamp = new Date().toLocaleTimeString();
+    setTerminalOutput(prev => prev + `\n\n[${timestamp}] $ adb shell ${cmdStr}\nRunning command on target Android device via Shizuku binder...`);
+    
+    setTimeout(() => {
+      let resultText = "";
+      const query = cmdStr.toLowerCase().trim();
+      
+      if (query.includes("route show dev ap0") || query.includes("r show dev ap0")) {
+        resultText = "10.154.51.0/24 dev ap0 proto kernel scope link src 10.154.51.39\n10.154.51.39 dev ap0 proto static scope link";
+      } else if (query.includes("route") || query.includes("ip r")) {
+        resultText = "default via 10.154.51.1 dev ap0 proto trunk metric 1024\n10.154.51.0/24 dev ap0 proto kernel scope link src 10.154.51.39\n10.154.51.39 dev ap0 proto static scope link\n192.168.43.0/24 dev wlan0 proto kernel scope link src 192.168.43.88";
+      } else if (query.includes("link") || query.includes("ifconfig")) {
+        resultText = "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n2: r_rmnet_data0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc mq state UNKNOWN mode DEFAULT group default qlen 1000\n    link/none\n3: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DORMANT group default qlen 3000\n    link/ether aa:bb:cc:dd:ee:01 brd ff:ff:ff:ff:ff:ff\n4: ap0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000\n    link/ether aa:bb:cc:ee:ff:12 brd ff:ff:ff:ff:ff:ff";
+      } else if (query.includes("neigh") || query.includes("arp")) {
+        resultText = "10.154.51.42 dev ap0 lladdr e4:b2:fb:12:44:a1 REACHABLE\n10.154.51.3 dev ap0 lladdr ac:5f:3e:b4:99:c2 REACHABLE\n10.154.51.115 dev ap0 lladdr d8:11:c4:99:12:ef DELAY";
+      } else if (query.includes("http_proxy")) {
+        resultText = `${ipAddress}:${port}`;
+      } else if (query.includes("dns1") || query.includes("dns")) {
+        resultText = "8.8.8.8";
+      } else if (query.length === 0) {
+        resultText = "Error: empty command string";
+      } else {
+        // Fallback for custom user commands
+        const cleanCmd = cmdStr.split(" ")[0];
+        resultText = `Executing raw tool client binary: ${cleanCmd}\nSuccess (Exit Code: 0)\nStdout: Operation completed successfully.\n[System Stream]: Executed custom task context cleanly.`;
+      }
+      
+      setTerminalOutput(prev => prev + `\n${resultText}\n[Exit Code: 0] (OK)`);
+      setTerminalRunning(false);
+    }, 900);
+  };
 
   // Reference for QR code canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1201,29 +1261,37 @@ jobs:
           <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[24px] shadow-2xl flex flex-col overflow-hidden">
             
             {/* Tab header buttons */}
-            <div className="flex border-b border-white/10 bg-black/10 p-1.5">
+            <div className="flex flex-wrap border-b border-white/10 bg-black/10 p-1.5 gap-1 md:gap-0">
               <button
                 onClick={() => setActiveTab("visual")}
-                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 ${activeTab === "visual" ? "bg-white/10 text-white shadow-lg" : "text-slate-400 hover:text-slate-200"}`}
+                className={`flex-1 min-w-[90px] py-2.5 text-[11px] font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 ${activeTab === "visual" ? "bg-white/10 text-white shadow-lg" : "text-slate-400 hover:text-slate-200"}`}
               >
-                <FileJson className="w-4 h-4" />
+                <FileJson className="w-3.5 h-3.5" />
                 Active Config
               </button>
               
               <button
                 onClick={() => setActiveTab("json_source")}
-                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 ${activeTab === "json_source" ? "bg-white/10 text-white shadow-lg" : "text-slate-400 hover:text-slate-200"}`}
+                className={`flex-1 min-w-[90px] py-2.5 text-[11px] font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 ${activeTab === "json_source" ? "bg-white/10 text-white shadow-lg" : "text-slate-400 hover:text-slate-200"}`}
               >
-                <Layers className="w-4 h-4" />
+                <Layers className="w-3.5 h-3.5" />
                 Edit JSON
               </button>
 
               <button
                 onClick={() => setActiveTab("kotlin_shizuku")}
-                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 ${activeTab === "kotlin_shizuku" ? "bg-emerald-500/15 text-emerald-300 border border-emerald-550/30 shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
+                className={`flex-1 min-w-[90px] py-2.5 text-[11px] font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 ${activeTab === "kotlin_shizuku" ? "bg-emerald-500/15 text-emerald-300 border border-emerald-550/30 shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
               >
-                <Cpu className="w-4 h-4 text-emerald-300" />
+                <Cpu className="w-3.5 h-3.5 text-emerald-300" />
                 Kotlin Code
+              </button>
+
+              <button
+                onClick={() => setActiveTab("custom_shell")}
+                className={`flex-1 min-w-[90px] py-2.5 text-[11px] font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1 ${activeTab === "custom_shell" ? "bg-blue-500/15 text-blue-300 border border-blue-550/30 shadow-sm" : "text-slate-400 hover:text-slate-200"}`}
+              >
+                <Terminal className="w-3.5 h-3.5 text-blue-300" />
+                Custom Shell
               </button>
             </div>
 
@@ -1415,6 +1483,146 @@ jobs:
                     <p className="text-slate-400 leading-relaxed text-[11.5px]">
                       This is production-grade Kotlin script ready for your Android Studio module. It implements active Shizuku binder calls, manual fallback options, and matches the <code className="bg-black/30 text-emerald-400 px-1 py-0.5 rounded text-[10.5px]">ip r | grep ap0</code> shell stream parsing rules natively!
                     </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: 4. Custom Shell Execution Area */}
+            {activeTab === "custom_shell" && (
+              <div className="p-5 flex flex-col gap-5">
+                {/* Header overview and instructions */}
+                <div className="bg-white/5 p-4 rounded-xl border border-white/10 text-[11.5px] leading-relaxed space-y-1.5 text-slate-300">
+                  <div className="flex items-center gap-1.5 text-blue-400 font-bold font-mono text-xs">
+                    <Terminal className="w-4 h-4 text-blue-400 font-bold" /> CUSTOM SHIZUKU / ADB SHELL COMMANDS
+                  </div>
+                  <p>
+                    Manage and execute persistent helper commands. Click <span className="text-emerald-455 font-bold text-emerald-400">[▶]</span> to run, or click the trash can icon to discard a command. Result outputs are piped directly into the simulated secure shell terminal below.
+                  </p>
+                </div>
+
+                {/* Commands listing */}
+                <div className="flex flex-col gap-2.5 max-h-[220px] overflow-y-auto pr-1 index-scroll-style">
+                  {customCommands.map((cmd) => (
+                    <div 
+                      key={cmd.id} 
+                      className="bg-slate-900/50 hover:bg-slate-900 border border-white/10 hover:border-blue-500/30 p-3 rounded-xl flex items-center justify-between gap-3 transition"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-semibold text-white tracking-wide truncate">{cmd.name}</div>
+                        <code className="text-[10px] text-blue-300 font-mono block mt-1 bg-black/40 px-1.5 py-0.5 rounded w-fit truncate max-w-full">
+                          $ {cmd.command}
+                        </code>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => runCustomShellCommand(cmd.name, cmd.command)}
+                          disabled={terminalRunning}
+                          title="Run Shell Command"
+                          className="p-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg transition-all"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setCustomCommands(prev => prev.filter(c => c.id !== cmd.id));
+                          }}
+                          title="Remove Command"
+                          className="p-2 bg-white/5 hover:bg-red-500/15 text-slate-400 hover:text-red-400 border border-white/5 hover:border-red-500/20 rounded-lg transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {customCommands.length === 0 && (
+                    <div className="text-center p-6 bg-slate-900/25 border border-dashed border-white/15 rounded-xl text-slate-500 text-xs">
+                      No custom commands logged. Register one below!
+                    </div>
+                  )}
+                </div>
+
+                {/* Add new command form */}
+                <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-3">
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
+                    Register New Command
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-slate-400 font-semibold font-mono">COMMAND LABEL</label>
+                      <input 
+                        type="text"
+                        placeholder="e.g. Fetch ARP List"
+                        value={newCommandName}
+                        onChange={(e) => setNewCommandName(e.target.value)}
+                        className="bg-black/30 border border-white/10 focus:border-blue-500/55 focus:outline-none rounded-lg p-2 text-xs font-sans text-white focus:ring-1 focus:ring-blue-500/30"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-slate-400 font-semibold font-mono">SHELL LOGIC</label>
+                      <input 
+                        type="text"
+                        placeholder="e.g. cat /proc/net/arp"
+                        value={newCommandText}
+                        onChange={(e) => setNewCommandText(e.target.value)}
+                        className="bg-black/30 border border-white/10 focus:border-blue-500/55 focus:outline-none rounded-lg p-2 text-xs font-mono text-white focus:ring-1 focus:ring-blue-500/30"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!newCommandName.trim() || !newCommandText.trim()) return;
+                      const nextId = String(Date.now());
+                      setCustomCommands(prev => [
+                        ...prev, 
+                        { id: nextId, name: newCommandName.trim(), command: newCommandText.trim() }
+                      ]);
+                      setNewCommandName("");
+                      setNewCommandText("");
+                    }}
+                    disabled={!newCommandName.trim() || !newCommandText.trim()}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-xs py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Append Command to List
+                  </button>
+                </div>
+
+                {/* Simulated Linux/ADB Terminal style Output stream */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Interactive Shell Output
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => triggerCopy(terminalOutput, "terminal_logs")}
+                        className="p-1 px-2 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white rounded border border-white/10 transition text-[10px] uppercase font-bold"
+                      >
+                        {copiedText === "terminal_logs" ? "Copied Logs!" : "Copy Stream"}
+                      </button>
+                      <button 
+                        onClick={() => setTerminalOutput("Terminal output cleared.")}
+                        className="p-1 px-2 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-red-400 rounded border border-white/10 hover:border-red-500/20 transition text-[10px] uppercase font-bold"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="bg-black/40 border border-white/10 rounded-xl p-4 font-mono text-xs text-slate-300 min-h-[160px] max-h-[220px] overflow-y-auto leading-relaxed select-all">
+                    <div className="text-slate-500 border-b border-white/5 pb-2 mb-2 text-[10px] font-mono flex items-center justify-between">
+                      <span>SHIZUKU SECURE BINDER SESSION (SHELL)</span>
+                      <span>ACTIVE GATEWAY: {ipAddress}</span>
+                    </div>
+                    <pre className="whitespace-pre-wrap font-mono text-[11px] text-slate-100">{terminalOutput}</pre>
+                    {terminalRunning && (
+                      <div className="text-blue-400 animate-pulse mt-1.5 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></span>
+                        Executing binder instruction stream...
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
