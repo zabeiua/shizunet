@@ -732,6 +732,74 @@ object ShizukuShellExecutor {
         }.start()
     }
 
+    /**
+     * Executes an arbitrary custom shell command on the device via Shizuku and returns standard output/error stream.
+     */
+    fun executeCustomCommand(command: String, onResult: (String) -> Unit) {
+        if (Shizuku.getVersion() < 11) {
+            onResult("Error: Shizuku binder API 11+ required. Ensure Shizuku is authorized and running.")
+            return
+        }
+
+        Thread {
+            try {
+                val newProcessMethod = Shizuku::class.java.getDeclaredMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                ).apply { isAccessible = true }
+                val process = newProcessMethod.invoke(null, arrayOf("sh"), null, null) as Process
+                val os = DataOutputStream(process.outputStream)
+                val reader = BufferedReader(InputStreamReader(process.inputStream))
+                val errReader = BufferedReader(InputStreamReader(process.errorStream))
+
+                os.writeBytes(command + "\n")
+                os.writeBytes("exit\n")
+                os.flush()
+
+                val output = StringBuilder()
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    output.append(line).append("\n")
+                }
+                
+                // Also capture error output
+                val errOutput = StringBuilder()
+                while (errReader.readLine().also { line = it } != null) {
+                    errOutput.append(line).append("\n")
+                }
+
+                process.waitFor()
+
+                os.close()
+                reader.close()
+                errReader.close()
+
+                val result = if (errOutput.isNotEmpty()) {
+                    output.toString() + "\nStderr:\n" + errOutput.toString()
+                } else {
+                    output.toString()
+                }
+
+                val finalResult = if (result.trim().isEmpty()) {
+                    "Success (No Output / Exit Code: 0)"
+                } else {
+                    result.trim()
+                }
+
+                Handler(Looper.getMainLooper()).post {
+                    onResult(finalResult)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Errors executing custom command: $command", e)
+                Handler(Looper.getMainLooper()).post {
+                    onResult("Error running command: ${e.message}\nEnsure Shizuku service is up.")
+                }
+            }
+        }.start()
+    }
+
     private fun parseNeighbors(lines: List<String>): List<ConnectedDevice> {
         val list = ArrayList<ConnectedDevice>()
         for (line in lines) {

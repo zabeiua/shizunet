@@ -155,282 +155,331 @@ fun ProxyStudioScreen(
     var jsonString by remember { mutableStateOf("") }
     var qrCodeBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
+    var activeTab by remember { mutableStateOf("gateway") } // "gateway" or "custom_shell"
+    var customCommands by remember { mutableStateOf(listOf(
+        "Show Network Routing Table" to "ip route show",
+        "Show Active SoftAP (ap0) info" to "ip route show dev ap0",
+        "List Network Interface Status" to "ip link show",
+        "List Connected Neighbours" to "ip neigh show | grep -v STALE",
+        "Check Active HTTP Proxy" to "settings get global http_proxy",
+        "Get System Preferred DNS" to "getprop net.dns1"
+    )) }
+    var newCommandName by remember { mutableStateOf("") }
+    var newCommandText by remember { mutableStateOf("") }
+    var terminalOutput by remember { mutableStateOf("Welcome to ShizuNet Terminal.\nTap any [RUN] command above to execute via Shizuku privilege shell natively.") }
+    var terminalRunning by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(20.dp)
-            .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(
-            text = "ShizuNet Controls",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = ComposeColor.White
-        )
-        Text(
-            text = "Translates SoftAP gateway IP configurations to modern sing-box config formats with absolute ease.",
-            fontSize = 12.sp,
-            color = ComposeColor.LightGray
-        )
-
-        Card(
+        // Tab selectors
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF1E293B))
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Shizuku Privilege Service",
-                        fontWeight = FontWeight.Bold,
-                        color = ComposeColor.White
-                    )
-                    
-                    val statusText = when {
-                        isShizukuAuthorized -> "Authorized"
-                        isShizukuBinderAlive -> "Unauthorized"
-                        else -> "Not Active"
-                    }
-                    val statusColor = when {
-                        isShizukuAuthorized -> ComposeColor(0xFF10B981) // Emerald
-                        isShizukuBinderAlive -> ComposeColor(0xFFF59E0B) // Amber/Orange
-                        else -> ComposeColor(0xFFEF4444) // Red
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(statusColor)
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = statusText,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ComposeColor.White
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (!isShizukuAuthorized) {
-                    Button(
-                        onClick = onRequestShizukuPermission,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6))
-                    ) {
-                        Text(if (isShizukuBinderAlive) "Grant Shizuku Privilege Shell" else "Check / Connect Shizuku")
-                    }
-                } else {
-                    Button(
-                        onClick = {
-                            isLoading = true
-                            adbFeedback = "Executing 'ip r' via privileged bash shell..."
-                            ShizukuShellExecutor.getHotspotGatewayIp { ip ->
-                                isLoading = false
-                                if (ip != null) {
-                                    ipAddress = ip
-                                    adbFeedback = "Success! SoftAP gateway resolved from routing tables: $ip"
-                                    Toast.makeText(context, "Gateway resolved: $ip", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    adbFeedback = "Command completed. Ensure hotspot (ap0/wlan1) is active on device."
-                                    Toast.makeText(context, "Could not resolve hotspot gateway automatically.", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF10B981)),
-                        enabled = !isLoading
-                    ) {
-                        Text(if (isLoading) "Running shell..." else "Auto-Detect Hotspot Gateway IP")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Text(
-                    text = adbFeedback,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    color = ComposeColor.Gray,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(ComposeColor(0xFF0F172A))
-                        .padding(8.dp)
-                )
+            Button(
+                onClick = { activeTab = "gateway" },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (activeTab == "gateway") ComposeColor(0xFF3B82F6) else ComposeColor(0xFF1E293B)
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Gateway Master", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ComposeColor.White)
+            }
+            Button(
+                onClick = { activeTab = "custom_shell" },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (activeTab == "custom_shell") ComposeColor(0xFF8B5CF6) else ComposeColor(0xFF1E293B)
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Custom Terminal", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = ComposeColor.White)
             }
         }
 
-        Text(
-            text = "Connected Hotspot Clients",
-            fontWeight = FontWeight.Bold,
-            color = ComposeColor.White,
-            fontSize = 16.sp
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF1E293B))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(scrollState),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
+            if (activeTab == "gateway") {
+                Text(
+                    text = "ShizuNet Controls",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ComposeColor.White
+                )
+                Text(
+                    text = "Translates SoftAP gateway IP configurations to modern sing-box config formats with absolute ease.",
+                    fontSize = 12.sp,
+                    color = ComposeColor.LightGray
+                )
+
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF1E293B))
                 ) {
-                    Text(
-                        text = "Active Hotspot Neighbors",
-                        fontWeight = FontWeight.Bold,
-                        color = ComposeColor.White,
-                        fontSize = 14.sp
-                    )
-                    
-                    Button(
-                        onClick = {
-                            if (isShizukuAuthorized) {
-                                isFetchingDevices = true
-                                ShizukuShellExecutor.getConnectedDevices { devices ->
-                                    connectedDevices = devices
-                                    isFetchingDevices = false
-                                }
-                            } else {
-                                Toast.makeText(context, "Authorize Shizuku first!", Toast.LENGTH_SHORT).show()
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Shizuku Privilege Service",
+                                fontWeight = FontWeight.Bold,
+                                color = ComposeColor.White
+                            )
+                            
+                            val statusText = when {
+                                isShizukuAuthorized -> "Authorized"
+                                isShizukuBinderAlive -> "Unauthorized"
+                                else -> "Not Active"
                             }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6)),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(32.dp),
-                        enabled = !isFetchingDevices
-                    ) {
+                            val statusColor = when {
+                                isShizukuAuthorized -> ComposeColor(0xFF10B981) // Emerald
+                                isShizukuBinderAlive -> ComposeColor(0xFFF59E0B) // Amber/Orange
+                                else -> ComposeColor(0xFFEF4444) // Red
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(statusColor)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = statusText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ComposeColor.White
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (!isShizukuAuthorized) {
+                            Button(
+                                onClick = onRequestShizukuPermission,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6))
+                            ) {
+                                Text(if (isShizukuBinderAlive) "Grant Shizuku Privilege Shell" else "Check / Connect Shizuku")
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    isLoading = true
+                                    adbFeedback = "Executing 'ip r' via privileged bash shell..."
+                                    ShizukuShellExecutor.getHotspotGatewayIp { ip ->
+                                        isLoading = false
+                                        if (ip != null) {
+                                            ipAddress = ip
+                                            adbFeedback = "Success! SoftAP gateway resolved from routing tables: $ip"
+                                            Toast.makeText(context, "Gateway resolved: $ip", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            adbFeedback = "Command completed. Ensure hotspot (ap0/wlan1) is active on device."
+                                            Toast.makeText(context, "Could not resolve hotspot gateway automatically.", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF10B981)),
+                                enabled = !isLoading
+                            ) {
+                                Text(if (isLoading) "Running shell..." else "Auto-Detect Hotspot Gateway IP")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
                         Text(
-                            text = if (isFetchingDevices) "Fetching..." else "Refresh List",
+                            text = adbFeedback,
+                            fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ComposeColor.White
+                            color = ComposeColor.Gray,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(ComposeColor(0xFF0F172A))
+                                .padding(8.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Connected Hotspot Clients",
+                    fontWeight = FontWeight.Bold,
+                    color = ComposeColor.White,
+                    fontSize = 16.sp
+                )
 
-                if (connectedDevices.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(ComposeColor(0xFF0F172A), RoundedCornerShape(8.dp))
-                            .padding(20.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No clients detected. Tap Refresh to scan routing tables.",
-                            color = ComposeColor.Gray,
-                            fontSize = 12.sp
-                        )
-                    }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        connectedDevices.forEach { device ->
-                            Card(
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF1E293B))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Active Hotspot Neighbors",
+                                fontWeight = FontWeight.Bold,
+                                color = ComposeColor.White,
+                                fontSize = 14.sp
+                            )
+                            
+                            Button(
+                                onClick = {
+                                    if (isShizukuAuthorized) {
+                                        isFetchingDevices = true
+                                        ShizukuShellExecutor.getConnectedDevices { devices ->
+                                            connectedDevices = devices
+                                            isFetchingDevices = false
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "Authorize Shizuku first!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6)),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.height(32.dp),
+                                enabled = !isFetchingDevices
+                            ) {
+                                Text(
+                                    text = if (isFetchingDevices) "Fetching..." else "Refresh List",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ComposeColor.White
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        if (connectedDevices.isEmpty()) {
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .border(1.dp, ComposeColor(0xFF334155), RoundedCornerShape(8.dp)),
-                                colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF0F172A))
+                                    .background(ComposeColor(0xFF0F172A), RoundedCornerShape(8.dp))
+                                    .padding(20.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "No clients detected. Tap Refresh to scan routing tables.",
+                                    color = ComposeColor.Gray,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                connectedDevices.forEach { device ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .border(1.dp, ComposeColor(0xFF334155), RoundedCornerShape(8.dp)),
+                                        colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF0F172A))
+                                    ) {
                                         Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(
-                                                text = device.ip,
-                                                fontWeight = FontWeight.Bold,
-                                                color = ComposeColor.White,
-                                                fontSize = 14.sp
-                                            )
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(4.dp))
-                                                    .background(ComposeColor(0xFF1E3A8A))
-                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                                            ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Text(
+                                                        text = device.ip,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = ComposeColor.White,
+                                                        fontSize = 14.sp
+                                                    )
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(4.dp))
+                                                            .background(ComposeColor(0xFF1E3A8A))
+                                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = device.interfaceName,
+                                                            fontSize = 9.sp,
+                                                            color = ComposeColor(0xFF93C5FD),
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(4.dp))
                                                 Text(
-                                                    text = device.interfaceName,
-                                                    fontSize = 9.sp,
-                                                    color = ComposeColor(0xFF93C5FD),
-                                                    fontWeight = FontWeight.Bold
+                                                    text = "MAC: ${device.mac}",
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = 11.sp,
+                                                    color = ComposeColor.Gray
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = "Vendor: ${device.manufacturer}",
+                                                    fontSize = 12.sp,
+                                                    color = ComposeColor(0xFF60A5FA),
+                                                    fontWeight = FontWeight.Medium
                                                 )
                                             }
-                                        }
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = "MAC: ${device.mac}",
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 11.sp,
-                                            color = ComposeColor.Gray
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = "Vendor: ${device.manufacturer}",
-                                            fontSize = 12.sp,
-                                            color = ComposeColor(0xFF60A5FA),
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    }
-                                    
-                                    Column(
-                                        horizontalAlignment = Alignment.End,
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(4.dp))
-                                                .background(
-                                                    if (device.status.uppercase() == "REACHABLE") 
-                                                        ComposeColor(0xFF065F46) 
-                                                    else 
-                                                        ComposeColor(0xFF374151)
-                                                )
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = device.status.uppercase(),
-                                                fontSize = 9.sp,
-                                                color = if (device.status.uppercase() == "REACHABLE") 
-                                                    ComposeColor(0xFF34D399) 
-                                                else 
-                                                    ComposeColor.LightGray,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                        
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-
-
-                                            Button(
-                                                onClick = {
-                                                    clipboardManager.setText(AnnotatedString(device.ip))
-                                                    Toast.makeText(context, "Copied IP: ${device.ip}", Toast.LENGTH_SHORT).show()
-                                                },
-                                                colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6)),
-                                                modifier = Modifier.height(26.dp),
-                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                                shape = RoundedCornerShape(4.dp)
+                                            
+                                            Column(
+                                                horizontalAlignment = Alignment.End,
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
                                             ) {
-                                                Text("COPY IP", fontSize = 8.sp, color = ComposeColor.White, fontWeight = FontWeight.Bold)
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(
+                                                            if (device.status.uppercase() == "REACHABLE") 
+                                                                ComposeColor(0xFF065F46) 
+                                                            else 
+                                                                ComposeColor(0xFF374151)
+                                                        )
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = device.status.uppercase(),
+                                                        fontSize = 9.sp,
+                                                        color = if (device.status.uppercase() == "REACHABLE") 
+                                                            ComposeColor(0xFF34D399) 
+                                                        else 
+                                                            ComposeColor.LightGray,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                                
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+
+
+                                                    Button(
+                                                        onClick = {
+                                                            clipboardManager.setText(AnnotatedString(device.ip))
+                                                            Toast.makeText(context, "Copied IP: ${device.ip}", Toast.LENGTH_SHORT).show()
+                                                        },
+                                                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6)),
+                                                        modifier = Modifier.height(26.dp),
+                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    ) {
+                                                        Text("COPY IP", fontSize = 8.sp, color = ComposeColor.White, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -439,124 +488,338 @@ fun ProxyStudioScreen(
                         }
                     }
                 }
-            }
-        }
 
-        Text(
-            text = "Proxy Router Configurations",
-            fontWeight = FontWeight.Bold,
-            color = ComposeColor.White,
-            fontSize = 16.sp
-        )
-
-        OutlinedTextField(
-            value = ipAddress,
-            onValueChange = { ipAddress = it },
-            label = { Text("Active Gateway IP") },
-            modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.outlinedTextFieldColors(
-                focusedBorderColor = ComposeColor(0xFF3B82F6),
-                unfocusedBorderColor = ComposeColor(0xFF475569)
-            )
-        )
-
-        OutlinedTextField(
-            value = portString,
-            onValueChange = { portString = it },
-            label = { Text("HTTP Proxy Port") },
-            modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.outlinedTextFieldColors(
-                focusedBorderColor = ComposeColor(0xFF3B82F6),
-                unfocusedBorderColor = ComposeColor(0xFF475569)
-            )
-        )
-
-        Button(
-            onClick = {
-                val port = portString.toIntOrNull() ?: 12334
-                val generatedJson = ProfileGenerator.generateJson(
-                    ip = ipAddress,
-                    port = port,
-                    geoip = ruleCountry,
-                    finalOutbound = finalOutbound
+                Text(
+                    text = "Proxy Router Configurations",
+                    fontWeight = FontWeight.Bold,
+                    color = ComposeColor.White,
+                    fontSize = 16.sp
                 )
-                jsonString = generatedJson
-                try {
-                    qrCodeBitmap = generateQrCode(generatedJson, 512)
-                    Toast.makeText(context, "Hiddify JSON Profile & QR generated successfully!", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    qrCodeBitmap = null
-                    Toast.makeText(context, "Error generating QR payload", Toast.LENGTH_SHORT).show()
+
+                OutlinedTextField(
+                    value = ipAddress,
+                    onValueChange = { ipAddress = it },
+                    label = { Text("Active Gateway IP") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        focusedBorderColor = ComposeColor(0xFF3B82F6),
+                        unfocusedBorderColor = ComposeColor(0xFF475569)
+                    )
+                )
+
+                OutlinedTextField(
+                    value = portString,
+                    onValueChange = { portString = it },
+                    label = { Text("HTTP Proxy Port") },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        focusedBorderColor = ComposeColor(0xFF3B82F6),
+                        unfocusedBorderColor = ComposeColor(0xFF475569)
+                    )
+                )
+
+                Button(
+                    onClick = {
+                        val port = portString.toIntOrNull() ?: 12334
+                        val generatedJson = ProfileGenerator.generateJson(
+                            ip = ipAddress,
+                            port = port,
+                            geoip = ruleCountry,
+                            finalOutbound = finalOutbound
+                        )
+                        jsonString = generatedJson
+                        try {
+                            qrCodeBitmap = generateQrCode(generatedJson, 512)
+                            Toast.makeText(context, "Hiddify JSON Profile & QR generated successfully!", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            qrCodeBitmap = null
+                            Toast.makeText(context, "Error generating QR payload", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF10B981))
+                ) {
+                    Text("Generate Hiddify Profile & QR", fontWeight = FontWeight.Bold, color = ComposeColor.White)
                 }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF10B981))
-        ) {
-            Text("Generate Hiddify Profile & QR", fontWeight = FontWeight.Bold)
-        }
 
-        Text(
-            text = "Hiddify Profile QR Code",
-            color = ComposeColor.White,
-            fontWeight = FontWeight.Bold,
-            fontSize = 16.sp
-        )
+                Text(
+                    text = "Hiddify Profile QR Code",
+                    color = ComposeColor.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF1E293B))
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (qrCodeBitmap == null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF1E293B))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (qrCodeBitmap == null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(240.dp)
+                                    .background(ComposeColor(0xFF0F172A), RoundedCornerShape(8.dp))
+                                    .border(1.dp, ComposeColor(0xFF334155), RoundedCornerShape(8.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No profile generated.\nConfigure options and click 'Generate Hiddify Profile & QR' above.",
+                                    color = ComposeColor.Gray,
+                                    fontSize = 12.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
+                        } else {
+                            Image(
+                                bitmap = qrCodeBitmap!!.asImageBitmap(),
+                                contentDescription = "Hiddify Config QR",
+                                modifier = Modifier
+                                    .size(240.dp)
+                                    .background(ComposeColor.White)
+                                    .border(1.dp, ComposeColor.White)
+                                    .padding(12.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(jsonString))
+                                    Toast.makeText(context, "Hiddify Profile JSON Copied!", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6)),
+                                enabled = jsonString.isNotEmpty()
+                            ) {
+                                Text("Copy Profile JSON", color = ComposeColor.White)
+                            }
+                        }
+                    }
+                }
+            } else {
+                // TAB CONTENT: Custom Shell
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF1E293B))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "Custom Android Commands",
+                            color = ComposeColor.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Execute direct shell instruction streams natively over the privileged Shizuku runtime.",
+                            color = ComposeColor.LightGray,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Registered Instructions",
+                    color = ComposeColor.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+
+                customCommands.forEach { (name, command) ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, ComposeColor(0xFF334155), RoundedCornerShape(10.dp)),
+                        colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF0F172A))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = name,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ComposeColor.White,
+                                    fontSize = 13.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "$ $command",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.sp,
+                                    color = ComposeColor(0xFF60A5FA)
+                                )
+                            }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(
+                                    onClick = {
+                                        if (!terminalRunning) {
+                                            terminalRunning = true
+                                            terminalOutput += "\n\n$ adb shell $command\nExecuting native instructions over binder..."
+                                            ShizukuShellExecutor.executeCustomCommand(command) { res ->
+                                                terminalOutput += "\n$res"
+                                                terminalRunning = false
+                                            }
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF10B981)),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(30.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    enabled = !terminalRunning
+                                ) {
+                                    Text("RUN", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White)
+                                }
+                                Button(
+                                    onClick = {
+                                        customCommands = customCommands.filter { it.first != name }
+                                        Toast.makeText(context, "Instruction removed", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFFEF4444)),
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(30.dp),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text("DEL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (customCommands.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(240.dp)
                             .background(ComposeColor(0xFF0F172A), RoundedCornerShape(8.dp))
-                            .border(1.dp, ComposeColor(0xFF334155), RoundedCornerShape(8.dp)),
+                            .padding(16.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No profile generated.\nConfigure options and click 'Generate Hiddify Profile & QR' above.",
+                            text = "No custom items registered. Save a command block below!",
                             color = ComposeColor.Gray,
-                            fontSize = 12.sp,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(16.dp)
+                            fontSize = 12.sp
                         )
                     }
-                } else {
-                    Image(
-                        bitmap = qrCodeBitmap!!.asImageBitmap(),
-                        contentDescription = "Hiddify Config QR",
-                        modifier = Modifier
-                            .size(240.dp)
-                            .background(ComposeColor.White)
-                            .border(1.dp, ComposeColor.White)
-                            .padding(12.dp)
-                    )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF1E293B)),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Button(
-                        onClick = {
-                            clipboardManager.setText(AnnotatedString(jsonString))
-                            Toast.makeText(context, "Hiddify Profile JSON Copied!", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6)),
-                        enabled = jsonString.isNotEmpty()
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Copy Profile JSON")
+                        Text(
+                            text = "Register New Command",
+                            color = ComposeColor.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                        OutlinedTextField(
+                            value = newCommandName,
+                            onValueChange = { newCommandName = it },
+                            label = { Text("Display Name (Label)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = TextFieldDefaults.outlinedTextFieldColors(
+                                focusedBorderColor = ComposeColor(0xFF3B82F6),
+                                unfocusedBorderColor = ComposeColor(0xFF475569)
+                            )
+                        )
+                        OutlinedTextField(
+                            value = newCommandText,
+                            onValueChange = { newCommandText = it },
+                            label = { Text("Shell Logic Command") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = TextFieldDefaults.outlinedTextFieldColors(
+                                focusedBorderColor = ComposeColor(0xFF3B82F6),
+                                unfocusedBorderColor = ComposeColor(0xFF475569)
+                            )
+                        )
+                        Button(
+                            onClick = {
+                                if (newCommandName.isNotBlank() && newCommandText.isNotBlank()) {
+                                    customCommands = customCommands + (newCommandName.trim() to newCommandText.trim())
+                                    newCommandName = ""
+                                    newCommandText = ""
+                                    Toast.makeText(context, "Command added!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6)),
+                            enabled = newCommandName.isNotBlank() && newCommandText.isNotBlank()
+                        ) {
+                            Text("Add Command", fontWeight = FontWeight.Bold, color = ComposeColor.White)
+                        }
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF0B1329))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Interactive Terminal Output",
+                                color = ComposeColor.Gray,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(
+                                    onClick = {
+                                        clipboardManager.setText(AnnotatedString(terminalOutput))
+                                        Toast.makeText(context, "Terminal stdout copied", Toast.LENGTH_SHORT).show()
+                                    }
+                                ) {
+                                    Text("Copy Output", color = ComposeColor(0xFF60A5FA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                TextButton(
+                                    onClick = {
+                                        terminalOutput = "Console output cleared."
+                                    }
+                                ) {
+                                    Text("Clear", color = ComposeColor(0xFFEF4444), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = terminalOutput,
+                            color = ComposeColor.Green,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(ComposeColor(0xFF020617))
+                                .padding(12.dp)
+                        )
                     }
                 }
             }
