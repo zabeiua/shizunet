@@ -4,9 +4,10 @@ object ProfileGenerator {
     /**
      * Produces high-fidelity custom-shaped setup profiles mirroring the Web client configs
      */
-    fun generateJson(ip: String, port: Int, geoip: String, finalOutbound: String): String {
+    fun generateJson(ip: String, port: Int, geoip: String, finalOutbound: String, proxyType: String = "http"): String {
         val cleanGeoip = geoip.lowercase().trim()
         val cleanFinal = finalOutbound.lowercase().trim()
+        val cleanProxyType = proxyType.lowercase().trim()
         
         return """{
   "log": {
@@ -44,7 +45,7 @@ object ProfileGenerator {
   ],
   "outbounds": [
     {
-      "type": "http",
+      "type": "$cleanProxyType",
       "tag": "proxy",
       "server": "$ip",
       "server_port": $port

@@ -135,6 +135,7 @@ fun ProxyStudioScreen(
     var portString by remember { mutableStateOf("12334") }
     var ruleCountry by remember { mutableStateOf("ru") }
     var finalOutbound by remember { mutableStateOf("proxy") }
+    var proxyType by remember { mutableStateOf("http") } // "http" or "socks"
     
     var isLoading by remember { mutableStateOf(false) }
     var adbFeedback by remember { mutableStateOf("Ready to resolve gateway...") }
@@ -162,7 +163,8 @@ fun ProxyStudioScreen(
         "List Network Interface Status" to "ip link show",
         "List Connected Neighbours" to "ip neigh show | grep -v STALE",
         "Check Active HTTP Proxy" to "settings get global http_proxy",
-        "Get System Preferred DNS" to "getprop net.dns1"
+        "Get System Preferred DNS" to "getprop net.dns1",
+        "What is My IP (External)" to "(printf 'GET / HTTP/1.1\\r\\nHost: ipinfo.io\\r\\nConnection: close\\r\\n\\r\\n'; sleep 3) | nc ipinfo.io 80"
     )) }
     var newCommandName by remember { mutableStateOf("") }
     var newCommandText by remember { mutableStateOf("") }
@@ -507,10 +509,54 @@ fun ProxyStudioScreen(
                     )
                 )
 
+                Text(
+                    text = "Proxy Protocol Type",
+                    color = ComposeColor.LightGray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { 
+                            proxyType = "http" 
+                            if (portString == "1080") {
+                                portString = "12334"
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (proxyType == "http") ComposeColor(0xFF3B82F6) else ComposeColor(0xFF1E293B)
+                        ),
+                        contentPadding = PaddingValues(vertical = 10.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("HTTP Proxy", fontSize = 12.sp, color = ComposeColor.White, fontWeight = FontWeight.Bold)
+                    }
+                    Button(
+                        onClick = { 
+                            proxyType = "socks" 
+                            if (portString == "12334") {
+                                portString = "1080"
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (proxyType == "socks") ComposeColor(0xFF8B5CF6) else ComposeColor(0xFF1E293B)
+                        ),
+                        contentPadding = PaddingValues(vertical = 10.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("SOCKS5 Proxy", fontSize = 12.sp, color = ComposeColor.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+
                 OutlinedTextField(
                     value = portString,
                     onValueChange = { portString = it },
-                    label = { Text("HTTP Proxy Port") },
+                    label = { Text(if (proxyType == "socks") "SOCKS5 Proxy Port" else "HTTP Proxy Port") },
                     modifier = Modifier.fillMaxWidth(),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
                         focusedBorderColor = ComposeColor(0xFF3B82F6),
@@ -520,12 +566,13 @@ fun ProxyStudioScreen(
 
                 Button(
                     onClick = {
-                        val port = portString.toIntOrNull() ?: 12334
+                        val port = portString.toIntOrNull() ?: if (proxyType == "socks") 1080 else 12334
                         val generatedJson = ProfileGenerator.generateJson(
                             ip = ipAddress,
                             port = port,
                             geoip = ruleCountry,
-                            finalOutbound = finalOutbound
+                            finalOutbound = finalOutbound,
+                            proxyType = proxyType
                         )
                         jsonString = generatedJson
                         try {

@@ -29,6 +29,7 @@ export default function App() {
   // Input fields
   const [ipAddress, setIpAddress] = useState("10.154.51.39");
   const [port, setPort] = useState(12334);
+  const [proxyType, setProxyType] = useState<"http" | "socks">("http");
   const [ruleCountry, setRuleCountry] = useState("ru");
   const [outboundTag, setOutboundTag] = useState("proxy");
   const [finalOutbound, setFinalOutbound] = useState("proxy");
@@ -49,7 +50,8 @@ export default function App() {
     { id: "3", name: "List Network Interface Status", command: "ip link show" },
     { id: "4", name: "List Connected Neighbours (excluding STALE)", command: "ip neigh show | grep -v STALE" },
     { id: "5", name: "Check Active HTTP Proxy", command: "settings get global http_proxy" },
-    { id: "6", name: "Get System Preferred DNS", command: "getprop net.dns1" }
+    { id: "6", name: "Get System Preferred DNS", command: "getprop net.dns1" },
+    { id: "7", name: "What is My IP (External)", command: "(printf 'GET / HTTP/1.1\\r\\nHost: ipinfo.io\\r\\nConnection: close\\r\\n\\r\\n'; sleep 3) | nc ipinfo.io 80" }
   ]);
   const [newCommandName, setNewCommandName] = useState("");
   const [newCommandText, setNewCommandText] = useState("");
@@ -85,6 +87,8 @@ export default function App() {
         resultText = `${ipAddress}:${port}`;
       } else if (query.includes("dns1") || query.includes("dns")) {
         resultText = "8.8.8.8";
+      } else if (query.includes("ipinfo.io") || query.includes("nc ipinfo")) {
+        resultText = `HTTP/1.1 200 OK\nContent-Type: application/json\nContent-Length: 251\nConnection: close\n\n{\n  "ip": "203.0.113.88",\n  "hostname": "cable-88-113-0-203.net",\n  "city": "London",\n  "region": "England",\n  "country": "GB",\n  "loc": "51.5074,-0.1278",\n  "org": "AS1234 Comcast Cable",\n  "postal": "EC1A",\n  "timezone": "Europe/London"\n}`;
       } else if (query.length === 0) {
         resultText = "Error: empty command string";
       } else {
@@ -138,10 +142,10 @@ export default function App() {
     ],
     outbounds: [
       {
-        type: "http",
+        type: proxyType,
         tag: outboundTag,
         server: ipAddress || "127.0.0.1",
-        server_port: Number(port) || 12334
+        server_port: Number(port) || (proxyType === "socks" ? 1080 : 12334)
       },
       {
         type: "direct",
@@ -173,7 +177,7 @@ export default function App() {
   useEffect(() => {
     setManualCodeEdit(jsonString);
     setSyntaxStatus({ valid: true, error: null });
-  }, [ipAddress, port, ruleCountry, outboundTag, finalOutbound]);
+  }, [ipAddress, port, ruleCountry, outboundTag, finalOutbound, proxyType]);
 
   // Handle manual code edits on the source JSON string
   const handleManualJsonChange = (value: string) => {
@@ -184,11 +188,12 @@ export default function App() {
       
       // Attempt to extract values and update fields back if matching the structure
       if (parsed.outbounds && Array.isArray(parsed.outbounds)) {
-        const httpProxy = parsed.outbounds.find((o: any) => o.type === "http");
-        if (httpProxy) {
-          if (httpProxy.server) setIpAddress(httpProxy.server);
-          if (httpProxy.server_port) setPort(Number(httpProxy.server_port));
-          if (httpProxy.tag) setOutboundTag(httpProxy.tag);
+        const proxyOutbound = parsed.outbounds.find((o: any) => o.type === "http" || o.type === "socks");
+        if (proxyOutbound) {
+          if (proxyOutbound.server) setIpAddress(proxyOutbound.server);
+          if (proxyOutbound.server_port) setPort(Number(proxyOutbound.server_port));
+          if (proxyOutbound.tag) setOutboundTag(proxyOutbound.tag);
+          if (proxyOutbound.type) setProxyType(proxyOutbound.type as "http" | "socks");
         }
       }
       if (parsed.route?.final) {
@@ -213,7 +218,7 @@ export default function App() {
   // Reset generation status when critical fields change
   useEffect(() => {
     setIsQrGenerated(false);
-  }, [ipAddress, port, ruleCountry, outboundTag, finalOutbound]);
+  }, [ipAddress, port, ruleCountry, outboundTag, finalOutbound, proxyType]);
 
   // Redraw QR code when canvas or config content updates
   useEffect(() => {
@@ -752,9 +757,10 @@ object ProfileGenerator {
     /**
      * Produces high-fidelity custom-shaped setup profiles mirroring the Web client configs
      */
-    fun generateJson(ip: String, port: Int, geoip: String, finalOutbound: String): String {
+    fun generateJson(ip: String, port: Int, geoip: String, finalOutbound: String, proxyType: String = "http"): String {
         val cleanGeoip = geoip.lowercase().trim()
         val cleanFinal = finalOutbound.lowercase().trim()
+        val cleanProxyType = proxyType.lowercase().trim()
         
         return """{
   "log": {
@@ -792,7 +798,7 @@ object ProfileGenerator {
   ],
   "outbounds": [
     {
-      "type": "http",
+      "type": "$cleanProxyType",
       "tag": "proxy",
       "server": "$ip",
       "server_port": $port
@@ -992,8 +998,14 @@ jobs:
       <header className="border-b border-white/10 bg-white/5 backdrop-blur-2xl sticky top-0 z-50 px-6 py-5">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-500 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/25">
-              <Code2 className="w-6 h-6 text-white animate-pulse" />
+            <div className="w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center shadow-lg shadow-blue-500/10 border border-white/15 bg-slate-900 group relative">
+              <img 
+                src="/src/assets/images/shizunet_icon_1782080353862.jpg" 
+                alt="ShizuNet Logo" 
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-blue-500/10 to-transparent pointer-events-none" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1053,6 +1065,43 @@ jobs:
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {/* Proxy Type Select */}
+              <div className="flex flex-col gap-2 col-span-1 sm:col-span-2">
+                <label className="text-xs font-semibold text-slate-300">
+                  Proxy Protocol Type
+                </label>
+                <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProxyType("http");
+                      if (port === 1080) setPort(12334);
+                    }}
+                    className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
+                      proxyType === "http"
+                        ? "bg-blue-600/20 text-blue-400 border border-blue-500/30 font-semibold"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    HTTP Proxy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProxyType("socks");
+                      if (port === 12334) setPort(1080);
+                    }}
+                    className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
+                      proxyType === "socks"
+                        ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 font-semibold"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    SOCKS5 Proxy
+                  </button>
+                </div>
+              </div>
+
               {/* IP Input */}
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
@@ -1081,14 +1130,14 @@ jobs:
               {/* Port Input */}
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                  <span>Server HTTP Port</span>
-                  <span className="text-[10px] text-slate-400 font-mono">Default: 12334</span>
+                  <span>Server {proxyType === "socks" ? "SOCKS5" : "HTTP"} Port</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Default: {proxyType === "socks" ? "1080" : "12334"}</span>
                 </label>
                 <input
                   type="number"
                   value={port}
                   onChange={(e) => setPort(Number(e.target.value))}
-                  placeholder="12334"
+                  placeholder={proxyType === "socks" ? "1080" : "12334"}
                   className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-3 text-sm font-mono focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 focus:outline-none transition-all"
                 />
               </div>
